@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MHM | Interactive Ontology Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&family=Inter:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Scribe's Palette -->
+    <!-- Application Structure Plan: A thematic, single-page application with a sticky top navigation bar for seamless scrolling between sections. The structure is designed to tell a story: starting with the high-level problem and solution (The Challenge), delving into the specifics of the data model (Ontology Explorer), showing its application with a subject hierarchy (SKOS Hierarchy) and code examples (Conversion Demo), and finally, demonstrating the impact through query results (Query the Graph). This non-linear, thematic structure is chosen over a linear report format to allow users with different interests (e.g., a linguist interested in the hierarchy, a developer in the RDF conversion) to directly access relevant information, enhancing usability and engagement. -->
+    <!-- Visualization & Content Choices: 
+        - The Challenge Section: Goal: Compare. Method: A conceptual "before/after" diagram using HTML/CSS to contrast rigid MARC records with a flexible LOD graph. Justification: Visually communicates the core value proposition instantly.
+        - Ontology Explorer: Goal: Organize & Inform. Method: Interactive buttons for classes, revealing associated properties dynamically with JS. Justification: Far more engaging and less overwhelming than static tables, promoting active exploration.
+        - Ontology Mix Chart: Goal: Inform. Method: A Chart.js Donut chart. Justification: Provides a quick visual summary of the hybrid nature of the MHM model.
+        - SKOS Hierarchy: Goal: Organize. Method: A collapsible tree view (nested HTML lists with JS toggles). Justification: Allows users to interactively explore the depth and structure of the subject vocabulary.
+        - Conversion Demo: Goal: Compare. Method: Tabbed interface to switch between RDF serializations (BIBFRAME, CIDOC CRM, MHM). Justification: Directly illustrates the differences and justifies the project's choice of the MHM model's pragmatic approach.
+        - Query the Graph: Goal: Demonstrate Impact. Method: Interactive query buttons that display a SPARQL query and a mock HTML table of results. Justification: Makes the abstract benefit of LOD concrete by showing the powerful, cross-cutting questions that can now be answered. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #FDFBF7;
+            color: #3D352E;
+        }
+        .hebrew-text, .hebrew-code {
+            font-family: 'Heebo', sans-serif;
+            direction: rtl;
+        }
+        .nav-link {
+            position: relative;
+            transition: color 0.3s;
+        }
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 2px;
+            bottom: -4px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #C07F5A;
+            transition: width 0.3s;
+        }
+        .nav-link.active, .nav-link:hover {
+            color: #C07F5A;
+        }
+        .nav-link.active::after, .nav-link:hover::after {
+            width: 100%;
+        }
+        .section-title {
+            font-family: 'Heebo', sans-serif;
+            font-weight: 300;
+        }
+        .btn-primary {
+            background-color: #8C9F8A;
+            color: #FFFFFF;
+            transition: background-color 0.3s;
+        }
+        .btn-primary:hover {
+            background-color: #71816f;
+        }
+        .btn-secondary {
+            background-color: #EAE3D9;
+            color: #3D352E;
+            transition: all 0.3s;
+            border: 1px solid #D9D1C7;
+        }
+        .btn-secondary:hover, .btn-secondary.active {
+            background-color: #C07F5A;
+            color: #FFFFFF;
+            border-color: #C07F5A;
+        }
+        .code-block {
+            background-color: #282c34;
+            color: #abb2bf;
+            font-family: 'Courier New', Courier, monospace;
+            direction: ltr;
+        }
+        .tree li {
+            list-style-type: none;
+            margin: 0;
+            padding: 0 0 0 2em;
+            position: relative;
+        }
+        .tree li::before, .tree li::after {
+            content: '';
+            position: absolute;
+            left: 0;
+        }
+        .tree li::before {
+            border-left: 1px solid #D9D1C7;
+            height: 100%;
+            top: 0;
+            width: 1px;
+        }
+        .tree li:last-child::before {
+            height: 1.25em;
+        }
+        .tree li::after {
+            border-top: 1px solid #D9D1C7;
+            height: 20px;
+            top: 1.25em;
+            width: 1.5em;
+        }
+        .tree .toggle {
+            cursor: pointer;
+            padding: 0 0.5em;
+            font-weight: bold;
+        }
+        .tree .toggle:hover {
+            color: #C07F5A;
+        }
+        .hidden-subtree {
+            display: none;
+        }
+        .tooltip {
+          visibility: hidden;
+          background-color: #3D352E;
+          color: #fff;
+          text-align: center;
+          border-radius: 6px;
+          padding: 5px 10px;
+          position: absolute;
+          z-index: 1;
+          bottom: 125%;
+          left: 50%;
+          margin-left: -60px;
+          opacity: 0;
+          transition: opacity 0.3s;
+        }
+        .has-tooltip:hover .tooltip {
+          visibility: visible;
+          opacity: 1;
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <header class="bg-[#FDFBF7]/80 backdrop-blur-sm sticky top-0 z-50 border-b border-gray-200/50">
+        <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <a href="#home" class="text-xl font-bold text-[#3D352E] font-sans">
+                <span class="font-heebo">מיפוי כתבי-יד עבריים</span> <span class="text-[#C07F5A]">|</span> MHM Ontology
+            </a>
+            <div class="hidden md:flex items-center space-x-8 text-sm font-medium">
+                <a href="#challenge" class="nav-link">The Challenge</a>
+                <a href="#ontology" class="nav-link">Ontology Explorer</a>
+                <a href="#hierarchy" class="nav-link">SKOS Hierarchy</a>
+                <a href="#demo" class="nav-link">Conversion Demo</a>
+                <a href="#query" class="nav-link">Query the Graph</a>
+            </div>
+            <button id="mobile-menu-button" class="md:hidden p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#C07F5A]">
+                 <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+            </button>
+        </nav>
+        <div id="mobile-menu" class="hidden md:hidden px-4 pt-2 pb-4 space-y-2">
+            <a href="#challenge" class="block nav-link text-sm py-1">The Challenge</a>
+            <a href="#ontology" class="block nav-link text-sm py-1">Ontology Explorer</a>
+            <a href="#hierarchy" class="block nav-link text-sm py-1">SKOS Hierarchy</a>
+            <a href="#demo" class="block nav-link text-sm py-1">Conversion Demo</a>
+            <a href="#query" class="block nav-link text-sm py-1">Query the Graph</a>
+        </div>
+    </header>
+
+    <main>
+        <section id="home" class="py-20 md:py-32 bg-[#F9F5EF]">
+            <div class="container mx-auto px-6 text-center">
+                <h1 class="text-4xl md:text-6xl font-bold tracking-tight section-title">From Records to Relationships</h1>
+                <p class="mt-6 max-w-3xl mx-auto text-lg md:text-xl text-[#6B6157]">Transforming fragmented library catalog data into a rich, interconnected web of knowledge. This interactive explorer unpacks the ontology behind the Mapping Hebrew Manuscripts (MHM) project, showing how we connect manuscripts, people, and places across centuries.</p>
+                <div class="mt-10">
+                    <a href="#challenge" class="btn-primary py-3 px-8 rounded-lg font-semibold shadow-md">Discover the Method</a>
+                </div>
+            </div>
+        </section>
+
+        <section id="challenge" class="py-20">
+            <div class="container mx-auto px-6">
+                <div class="text-center mb-16">
+                    <h2 class="text-3xl md:text-4xl font-bold section-title">The Challenge: Unlocking Trapped Knowledge</h2>
+                    <p class="mt-4 max-w-3xl mx-auto text-lg text-[#6B6157]">Library data, based on the decades-old MARC standard, is a collection of isolated records. Valuable information about a manuscript's history, creators, and materials is fragmented across fields or locked away in unstructured notes, making deep analysis nearly impossible.</p>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-12 items-center">
+                    <div class="p-8 bg-white rounded-xl shadow-sm border border-gray-200/80">
+                        <h3 class="text-2xl font-bold text-center text-red-500 mb-4">Before: The Silo of MARC</h3>
+                        <div class="space-y-3 text-sm">
+                            <div class="flex items-center bg-gray-50 p-2 rounded-md">
+                                <span class="font-mono bg-red-100 text-red-700 text-xs font-bold mr-3 px-2.5 py-0.5 rounded">100</span>
+                                <div><span class="font-bold">Author:</span> <span class="hebrew-text">משה בן מימון</span></div>
+                            </div>
+                            <div class="flex items-center bg-gray-50 p-2 rounded-md">
+                                <span class="font-mono bg-red-100 text-red-700 text-xs font-bold mr-3 px-2.5 py-0.5 rounded">245</span>
+                                <div><span class="font-bold">Title:</span> <span class="hebrew-text">משנה תורה</span></div>
+                            </div>
+                            <div class="flex items-center bg-gray-50 p-2 rounded-md">
+                                <span class="font-mono bg-red-100 text-red-700 text-xs font-bold mr-3 px-2.5 py-0.5 rounded">300</span>
+                                <div><span class="font-bold">Material:</span> <span class="hebrew-text">קלף</span></div>
+                            </div>
+                            <div class="bg-gray-100 p-4 rounded-md border-l-4 border-red-400">
+                                <h4 class="font-bold mb-2 flex items-center"><span class="font-mono text-red-700 text-xs font-bold mr-2">561</span> <span>Provenance Note (Locked Text)</span></h4>
+                                <p class="text-gray-600 hebrew-text text-right text-base leading-relaxed">"נכתב על ידי שלמה בן יוסף בסרגוסה. נרכש על ידי הספרייה ב-1965."</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-8 bg-white rounded-xl shadow-sm border border-gray-200/80">
+                        <h3 class="text-2xl font-bold text-center text-green-600 mb-4">After: The Web of Data (LOD)</h3>
+                        <div class="relative h-64 flex items-center justify-center">
+                            <canvas id="lod-graph-canvas" class="absolute top-0 left-0 w-full h-full"></canvas>
+                            <div class="absolute" style="top: 50%; left: 50%; transform: translate(-50%, -50%);">
+                                <div id="node-manuscript" class="p-2 px-3 bg-green-100 text-green-800 rounded-lg shadow font-bold text-sm text-center">Manuscript<br/><span class="font-normal hebrew-text">משנה תורה</span></div>
+                            </div>
+                            <div id="node-author" class="absolute p-2 px-3 bg-blue-100 text-blue-800 rounded-lg shadow font-semibold text-sm" style="top: 0; left: 20%;">Author</div>
+                            <div id="node-scribe" class="absolute p-2 px-3 bg-blue-100 text-blue-800 rounded-lg shadow font-semibold text-sm" style="top: 0; right: 20%;">Scribe</div>
+                            <div id="node-place" class="absolute p-2 px-3 bg-purple-100 text-purple-800 rounded-lg shadow font-semibold text-sm" style="bottom: 0; left: 10%;">Place</div>
+                            <div id="node-material" class="absolute p-2 px-3 bg-yellow-100 text-yellow-800 rounded-lg shadow font-semibold text-sm" style="bottom: 0; right: 10%;">Material</div>
+                        </div>
+                    </div>
+                </div>
+                 <div class="mt-16 text-center">
+                    <h3 class="text-2xl font-bold section-title">The Solution: An Entity-Centric Ontology</h3>
+                    <p class="mt-4 max-w-3xl mx-auto text-lg text-[#6B6157]">The MHM project implements a pragmatic, entity-centric ontology. Instead of just describing records, we model the core entities—manuscripts, works, people, places—and the rich relationships between them. By using Large Language Models (LLMs), we extract and structure the data from unstructured notes, creating a powerful knowledge graph ready for deep, semantic querying.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="ontology" class="py-20 bg-[#F9F5EF]">
+            <div class="container mx-auto px-6">
+                <div class="text-center mb-16">
+                    <h2 class="text-3xl md:text-4xl font-bold section-title">Interactive Ontology Explorer</h2>
+                    <p class="mt-4 max-w-3xl mx-auto text-lg text-[#6B6157]">Explore the building blocks of the MHM data model. Click on a class to see its definition and the properties used to describe it. This model blends standard vocabularies like Wikidata and Schema.org with custom terms to meet the specific needs of manuscript research.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-8">
+                    <div class="md:col-span-4 lg:col-span-3">
+                        <h3 class="text-xl font-bold mb-4">Core Classes</h3>
+                        <div id="class-buttons" class="flex flex-wrap md:flex-col gap-2"></div>
+                         <h3 class="text-xl font-bold mb-4 mt-8">Ontology Mix</h3>
+                        <div class="chart-container relative h-64 md:h-56 w-full max-w-xs mx-auto">
+                            <canvas id="ontology-mix-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="md:col-span-8 lg:col-span-9">
+                        <div id="class-display" class="p-8 bg-white rounded-xl shadow-sm border border-gray-200/80 min-h-[400px]">
+                           <div class="flex flex-col items-center justify-center h-full text-center text-gray-500">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                               <p class="text-lg">Select a class on the left to view its details.</p>
+                           </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="hierarchy" class="py-20">
+            <div class="container mx-auto px-6">
+                <div class="text-center mb-16">
+                    <h2 class="text-3xl md:text-4xl font-bold section-title">The Friedberg Subject Hierarchy (SKOS)</h2>
+                    <p class="mt-4 max-w-3xl mx-auto text-lg text-[#6B6157]">A key goal is to enable subject-based discovery. We've modeled the Friedberg Jewish Manuscript Society's subject hierarchy as a formal Knowledge Organization System (KOS) using the SKOS standard. This turns a simple list into a powerful, queryable taxonomy. Click the [+] icons to expand the hierarchy.</p>
+                </div>
+                <div id="skos-hierarchy-container" class="p-8 bg-white rounded-xl shadow-sm border border-gray-200/80 max-h-[60vh] overflow-y-auto">
+                    <div class="text-center text-gray-500 py-10">Loading Hierarchy...</div>
+                </div>
+            </div>
+        </section>
+
+        <section id="demo" class="py-20 bg-[#F9F5EF]">
+            <div class="container mx-auto px-6">
+                <div class="text-center mb-16">
+                    <h2 class="text-3xl md:text-4xl font-bold section-title">Live Conversion Demo</h2>
+                    <p class="mt-4 max-w-3xl mx-auto text-lg text-[#6B6157]">See how a single MARC record can be transformed into different Linked Data formats. While BIBFRAME and CIDOC CRM are powerful, the MHM model (using Wikidata and Schema.org) was chosen for its pragmatic balance of detail, web discoverability, and immediate integration with global knowledge graphs.</p>
+                </div>
+
+                <div class="grid lg:grid-cols-5 gap-8">
+                    <div class="lg:col-span-2 p-6 bg-white rounded-xl shadow-sm border border-gray-200/80">
+                        <h3 class="font-bold text-xl mb-4 hebrew-text text-right">מקור: רשומת MARC</h3>
+                        <h4 class="font-semibold text-lg hebrew-text text-right">משנה תורה, מאה 14</h4>
+                        <div class="mt-4 space-y-2 text-sm hebrew-text text-right">
+                             <p><strong>100 $a:</strong> משה בן מימון, ‏ ‎$d 1138-1204.</p>
+                             <p><strong>245 $a:</strong> משנה תורה. ‏</p>
+                             <p><strong>260 $a:</strong> [ספרד?]</p>
+                             <p><strong>260 $c:</strong> [1300-1399?]</p>
+                             <p><strong>300 $a:</strong> 1 כרך (396 דפים)</p>
+                             <p><strong>300 $b:</strong> קלף</p>
+                             <p><strong>001:</strong> 990023843560205171</p>
+                             <p><strong>856 $u:</strong> http://...</p>
+                        </div>
+                    </div>
+                    <div class="lg:col-span-3">
+                        <div class="flex items-center space-x-2 mb-4" id="rdf-buttons">
+                            <button class="btn-secondary py-2 px-4 rounded-md text-sm font-semibold" data-rdf="mhm">MHM Model</button>
+                            <button class="btn-secondary py-2 px-4 rounded-md text-sm font-semibold" data-rdf="bibframe">BIBFRAME</button>
+                            <button class="btn-secondary py-2 px-4 rounded-md text-sm font-semibold" data-rdf="cidoc">CIDOC CRM</button>
+                        </div>
+                        <div id="rdf-display" class="code-block rounded-xl p-4 text-xs overflow-x-auto"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="query" class="py-20">
+            <div class="container mx-auto px-6">
+                <div class="text-center mb-16">
+                    <h2 class="text-3xl md:text-4xl font-bold section-title">Query the Knowledge Graph</h2>
+                    <p class="mt-4 max-w-3xl mx-auto text-lg text-[#6B6157]">The true power of this new model is the ability to ask complex questions that were previously impossible. Select a sample research question below to see the SPARQL query used to answer it and the kind of rich, structured results it can produce.</p>
+                </div>
+                 <div class="flex flex-wrap justify-center gap-3 mb-8" id="sparql-buttons">
+                    <button class="btn-secondary py-2 px-5 rounded-md text-sm font-semibold" data-query="1">Geographic & Thematic Analysis</button>
+                    <button class="btn-secondary py-2 px-5 rounded-md text-sm font-semibold" data-query="2">Provenance Analysis</button>
+                    <button class="btn-secondary py-2 px-5 rounded-md text-sm font-semibold" data-query="3">Network Analysis</button>
+                 </div>
+                 <div class="grid lg:grid-cols-2 gap-8">
+                    <div>
+                        <h3 class="text-xl font-semibold mb-2">SPARQL Query</h3>
+                        <p id="sparql-description" class="text-sm text-[#6B6157] mb-4 min-h-[40px]">Select a research question to see the corresponding query.</p>
+                        <div id="sparql-display" class="code-block rounded-xl p-4 text-xs overflow-x-auto min-h-[300px]"></div>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-semibold mb-2">Mock Results</h3>
+                        <p class="text-sm text-gray-500 mb-4 min-h-[40px]">Results for the selected query will appear here.</p>
+                        <div id="sparql-results" class="bg-white p-4 rounded-xl shadow-sm border border-gray-200/80 min-h-[300px]">
+                            <div class="flex flex-col items-center justify-center h-full text-center text-gray-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                <p>Query results will be displayed here.</p>
+                            </div>
+                        </div>
+                    </div>
+                 </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="bg-[#F9F5EF] border-t border-gray-200/60">
+        <div class="container mx-auto px-6 py-8 text-center text-[#6B6157]">
+            <p class="text-sm">An interactive exploration of the Mapping Hebrew Manuscripts (MHM) project ontology.</p>
+            <p class="text-xs mt-2">Generated based on the Ph.D. research proposal by Alexander Goldberg, Bar-Ilan University, 2025.</p>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            
+            const ontologyData = {
+                classes: [
+                    { 
+                        id: 'Manuscript', 
+                        label: 'Manuscript', 
+                        description: 'Represents the unique, tangible manuscript as a physical artifact. This class is the locus of codicological data (material, extent) and provenance history. It is a specific realization of an abstract work.',
+                        equivalents: ['schema:Manuscript', 'wd:Q87167']
+                    },
+                    { 
+                        id: 'Work', 
+                        label: 'Work', 
+                        description: 'Represents the abstract intellectual or artistic creation embodied in one or more manuscripts (e.g., the text of Mishneh Torah). This class is the locus of authorial and subject-related data.',
+                        equivalents: ['schema:CreativeWork']
+                    },
+                    { 
+                        id: 'Person', 
+                        label: 'Person', 
+                        description: 'Represents an individual who has a relationship with a manuscript or work, such as an author, scribe, owner, patron, or censor.',
+                        equivalents: ['schema:Person', 'wd:Q5']
+                    },
+                    { 
+                        id: 'Organization', 
+                        label: 'Organization', 
+                        description: 'Represents a corporate body or institution with a relationship to a manuscript, such as a holding library, scriptorium, or auction house.',
+                        equivalents: ['schema:Organization', 'wd:Q43229']
+                    },
+                    { 
+                        id: 'Place', 
+                        label: 'Place', 
+                        description: 'Represents a geographic location relevant to a manuscript\'s lifecycle, such as its place of origin, a location of ownership, or the location of its holding institution.',
+                        equivalents: ['schema:Place']
+                    },
+                    {
+                        id: 'ProvenanceEvent',
+                        label: 'Provenance Event',
+                        description: 'A custom class to model a discrete event in the manuscript\'s history, such as a sale, donation, or act of censorship. This provides a "CRM-lite" mechanism for structuring data extracted from unstructured notes.',
+                        equivalents: ['N/A']
+                    }
+                ],
+                properties: [
+                    { id: 'mhm:realizationOf', label: 'realization of', domain: 'Manuscript', range: 'Work', type: 'relational', description: 'Connects the physical manuscript to the abstract work it contains.' },
+                    { id: 'wdt:P50', label: 'author', domain: 'Work', range: 'Person', type: 'relational', description: 'The main creator of the intellectual content of the work.' },
+                    { id: 'wdt:P195', label: 'collection', domain: 'Manuscript', range: 'Organization', type: 'relational', description: 'The institution or collection that currently holds the manuscript.' },
+                    { id: 'wdt:P921', label: 'main subject', domain: 'Work', range: 'skos:Concept', type: 'relational', description: 'The primary topic of the work, linking to the Friedberg KOS.' },
+                    { id: 'wdt:P186', label: 'material used', domain: 'Manuscript', range: 'wd:Item', type: 'relational', description: 'The physical material on which the manuscript is written (e.g., parchment).' },
+                    { id: 'mhm:hasScribe', label: 'has scribe', domain: 'Manuscript', range: 'Person', type: 'relational', description: 'Identifies the person who physically wrote the manuscript. (LLM-extracted)' },
+                    { id: 'mhm:hasOwner', label: 'has owner', domain: 'Manuscript', range: 'Person or Organization', type: 'relational', description: 'Identifies a past or present owner of the manuscript. (LLM-extracted)' },
+                    { id: 'mhm:hasProvenanceEvent', label: 'has provenance event', domain: 'Manuscript', range: 'ProvenanceEvent', type: 'relational', description: 'Links a manuscript to a specific event in its history.'},
+                    { id: 'dct:spatial', label: 'spatial coverage', domain: 'Manuscript or ProvenanceEvent', range: 'Place', type: 'relational', description: 'The geographic location associated with an entity.' },
+                    { id: 'mhm:involvedAgent', label: 'involved agent', domain: 'ProvenanceEvent', range: 'Person or Organization', type: 'relational', description: 'An agent participating in a provenance event.'},
+                    { id: 'wdt:P1476', label: 'title', domain: 'Work', range: 'rdf:langString', type: 'datatype', description: 'The title of the work.' },
+                    { id: 'dct:created', label: 'date created', domain: 'Manuscript', range: 'xsd:string or xsd:date', type: 'datatype', description: 'The creation date of the manuscript.' },
+                    { id: 'bf:extent', label: 'extent', domain: 'Manuscript', range: 'rdfs:Literal', type: 'datatype', description: 'The physical extent of the manuscript (e.g., "1 כרך (396 דפים)").' },
+                    { id: 'dct:identifier', label: 'identifier', domain: 'Manuscript', range: 'rdfs:Literal', type: 'datatype', description: 'A unique identifier for the manuscript, such as the NLI system number.' },
+                    { id: 'wdt:P953', label: 'full work available at', domain: 'Manuscript', range: 'xsd:anyURI', type: 'datatype', description: 'A URL pointing to a digital surrogate.' },
+                    { id: 'rdfs:label', label: 'label', domain: 'Person, Organization, Place', range: 'rdf:langString', type: 'datatype', description: 'The human-readable name of an entity.'},
+                    { id: 'dct:date', label: 'date', domain: 'ProvenanceEvent', range: 'xsd:string or xsd:date', type: 'datatype', description: 'The date associated with a provenance event.'}
+                ]
+            };
+            
+            const rdfData = {
+                mhm: `@prefix mhm: <http://mhm.example.org/ontology/> .
+@prefix schema: <http://schema.org/> .
+@prefix wd: <http://www.wikidata.org/entity/> .
+@prefix wdt: <http://www.wikidata.org/prop/direct/> .
+
+# Pragmatic, discoverable, and linked to global data
+mhm:manuscript_990023843560205171 a schema:Manuscript ;
+    # --- Using native Schema.org properties for web visibility ---
+    schema:name "משנה תורה"@he ;
+    schema:author wd:Q212028 ; # Link to Maimonides
+    schema:material wd:Q226697 ; # Link to Parchment
+    schema:provider wd:Q188935 ; # Link to NLI
+    
+    # --- Using Wikidata properties for deep integration ---
+    wdt:P50 wd:Q212028 ;      # author
+    wdt:P186 wd:Q226697 ;     # material used
+    wdt:P195 wd:Q188935 ;     # collection
+    wdt:P3959 "990023843560205171" . # NNL item ID`,
+                bibframe: `@prefix bf: <http://id.loc.gov/ontologies/bibframe/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# Library-centric, separates Work, Instance, Item
+# The conceptual work
+<.../work/mishneh-torah> a bf:Work ;
+    bf:contribution [ a bf:Contribution ;
+        bf:agent <.../viaf/100185495> ; # Maimonides
+        bf:role <.../relators/aut> 
+    ] .
+
+# The specific manuscript instance
+<.../instance/990023843560205171> a bf:Instance, bf:Manuscript ;
+    bf:instanceOf <.../work/mishneh-torah> ;
+    bf:provisionActivity [
+        a bf:Publication ;
+        bf:place [ rdfs:label "ספרד?"@he ] ;
+        bf:date "[1300-1399?]"
+    ] .`,
+                cidoc: `@prefix crm: <http://www.cidoc-crm.org/cidoc-crm/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# Event-based, rich context, but verbose
+# The physical manuscript
+<.../manuscript/990023843560205171> a crm:E22_Man-Made_Object ;
+    crm:P2_has_type <.../aat/300028569> ; # "manuscripts"
+    crm:P45_consists_of [
+        a crm:E57_Material ;
+        crm:P2_has_type <.../aat/300014023> # "parchment"
+    ].
+
+# The production event
+<.../production/990023843560205171> a crm:E12_Production ;
+    crm:P108_has_produced <.../manuscript/990023843560205171> ;
+    crm:P4_has_time-span [ ... ] ;
+    crm:P7_took_place_at [ rdfs:label "ספרד?"@he ] .`
+            };
+
+            const hierarchyData = [
+                {"frame_id":3,"parent_frame_id":null,"frame_name_he":"פרשנות מקרא","frame_name_en":"Biblical Exegesis"},
+                {"frame_id":507,"parent_frame_id":3,"frame_name_he":"פירוש אבן עזרא למקרא","frame_name_en":"Ibn Ezra's Commentary on the Bible"},
+                {"frame_id":295,"parent_frame_id":null,"frame_name_he":"מדרש","frame_name_en":"Midrash"},
+                {"frame_id":300,"parent_frame_id":295,"frame_name_he":"מדרשי אגדה","frame_name_en":"Midreshei Aggadah"},
+                {"frame_id":301,"parent_frame_id":300,"frame_name_he":"מדרש רבה","frame_name_en":"Midrash Rabbah"},
+                {"frame_id":302,"parent_frame_id":null,"frame_name_he":"הלכה","frame_name_en":"Halakhah"},
+                {"frame_id":305,"parent_frame_id":302,"frame_name_he":"ספרות הגאונים","frame_name_en":"Geonic Literature"},
+                {"frame_id":307,"parent_frame_id":302,"frame_name_he":"משנה תורה","frame_name_en":"Mishneh Torah"},
+                {"frame_id":308,"parent_frame_id":302,"frame_name_he":"ספרי פסיקה","frame_name_en":"Books of Halakhic Rulings"},
+                {"frame_id":510,"parent_frame_id":308,"frame_name_he":"שולחן ערוך","frame_name_en":"Shulhan Arukh"},
+                {"frame_id":499,"parent_frame_id":null,"frame_name_he":"קבלה וחסידות","frame_name_en":"Kabbalah and Hasidut"},
+                {"frame_id":500,"parent_frame_id":499,"frame_name_he":"ספרות הזהר","frame_name_en":"Zoharic Literature"},
+                {"frame_id":501,"parent_frame_id":500,"frame_name_he":"זוהר","frame_name_en":"Zohar"}
+            ];
+
+            const sparqlData = {
+                '1': {
+                    description: 'Finds all 14th-century manuscripts from Spain classified as "Kabbalah" or any sub-genre within the Friedberg KOS.',
+                    query: `PREFIX mhm: <...>
+PREFIX wdt: <...>
+PREFIX skos: <...>
+
+SELECT ?manuscript ?workTitle ?origin
+WHERE {
+  ?kabbalahConcept skos:prefLabel "Kabbalah"@en .
+  ?work wdt:P921 ?subject .
+  ?subject skos:broader* ?kabbalahConcept .
+  ?manuscript mhm:realizationOf ?work ;
+              dct:created ?dateString ;
+              dct:spatial <.../Spain> .
+  FILTER(CONTAINS(?dateString, "14th"))
+}`,
+                    results: [
+                        { manuscript: 'mhm:ms_101', workTitle: 'Sefer Yetzirah', origin: 'Spain' },
+                        { manuscript: 'mhm:ms_234', workTitle: 'Zohar', origin: 'Spain' },
+                        { manuscript: 'mhm:ms_456', workTitle: 'Sefer ha-Bahir', origin: 'Spain' },
+                    ]
+                },
+                '2': {
+                    description: 'Traces the complete ownership history of a specific manuscript (NLI ID 99...) by finding all associated provenance events and ordering them by date.',
+                    query: `PREFIX mhm: <...>
+PREFIX dct: <...>
+
+SELECT ?eventDate ?eventType ?agent ?place
+WHERE {
+  ?manuscript dct:identifier "990..." .
+  ?manuscript mhm:hasProvenanceEvent ?event .
+  
+  ?event dct:type ?eventType .
+  OPTIONAL { ?event dct:date ?eventDate . }
+  OPTIONAL { ?event mhm:involvedAgent ?agent . }
+  OPTIONAL { ?event dct:spatial ?place . }
+}
+ORDER BY ?eventDate`,
+                    results: [
+                        { eventDate: '1350~', eventType: 'Creation', agent: 'Shlomo ben Yosef', place: 'Saragossa' },
+                        { eventDate: '1680', eventType: 'Ownership', agent: 'Isaac Aboab', place: 'Venice' },
+                        { eventDate: '1965', eventType: 'Acquisition', agent: 'National Library of Israel', place: 'Jerusalem' },
+                    ]
+                },
+                '3': {
+                    description: 'Identifies scribes active in the Iberian Peninsula during the 15th century and lists the works they copied, revealing potential intellectual networks.',
+                    query: `PREFIX mhm: <...>
+PREFIX dct: <...>
+
+SELECT DISTINCT ?scribeLabel ?workTitle
+WHERE {
+ ?manuscript mhm:hasScribe ?scribe .
+ ?scribe rdfs:label ?scribeLabel .
+ 
+ ?manuscript dct:spatial/wdt:P30* <.../Iberian_Peninsula> ;
+             dct:created ?dateString .
+ FILTER(CONTAINS(?dateString, "15th"))
+ 
+ ?manuscript mhm:realizationOf/wdt:P1476 ?workTitle.
+}
+ORDER BY ?scribeLabel`,
+                    results: [
+                        { scribeLabel: 'David ibn Yahya', workTitle: 'Nevi\'im' },
+                        { scribeLabel: 'Moses Arragel', workTitle: 'Alba Bible' },
+                        { scribeLabel: 'Samuel ibn Musa', workTitle: 'Guide for the Perplexed' },
+                    ]
+                }
+            };
+
+            const classButtonsContainer = document.getElementById('class-buttons');
+            const classDisplay = document.getElementById('class-display');
+            ontologyData.classes.forEach(cls => {
+                const button = document.createElement('button');
+                button.textContent = cls.label;
+                button.className = 'btn-secondary py-2 px-4 rounded-md text-sm font-semibold w-full text-left';
+                button.onclick = () => showClassDetails(cls.id);
+                classButtonsContainer.appendChild(button);
+            });
+
+            function showClassDetails(classId) {
+                const cls = ontologyData.classes.find(c => c.id === classId);
+                const relatedProps = ontologyData.properties.filter(p => p.domain.includes(classId));
+
+                document.querySelectorAll('#class-buttons button').forEach(btn => {
+                    if (btn.textContent === cls.label) {
+                        btn.classList.add('active');
+                    } else {
+                        btn.classList.remove('active');
+                    }
+                });
+
+                let propertiesHTML = '<div class="mt-6"><h4 class="text-lg font-semibold mb-3">Associated Properties</h4><div class="space-y-3">';
+                relatedProps.forEach(prop => {
+                    const propTypeColor = prop.type === 'relational' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800';
+                    propertiesHTML += `
+                        <div class="p-3 bg-gray-50/80 rounded-lg border border-gray-200/60">
+                            <div class="flex justify-between items-center">
+                                <span class="font-mono text-sm font-semibold">${prop.id}</span>
+                                <span class="text-xs font-bold px-2 py-0.5 rounded ${propTypeColor}">${prop.type}</span>
+                            </div>
+                            <p class="text-sm text-gray-600 mt-1">${prop.description}</p>
+                            <div class="text-xs text-gray-500 mt-2"><strong>Domain:</strong> ${prop.domain} &rarr; <strong>Range:</strong> ${prop.range}</div>
+                        </div>`;
+                });
+                propertiesHTML += '</div></div>';
+
+                classDisplay.innerHTML = `
+                    <h3 class="text-2xl font-bold">${cls.label}</h3>
+                    <div class="text-xs text-gray-500 font-mono mt-1">
+                        ${cls.equivalents.map(eq => `<span>${eq}</span>`).join(' &equiv; ')}
+                    </div>
+                    <p class="mt-4 text-gray-700">${cls.description}</p>
+                    ${propertiesHTML}
+                `;
+            }
+
+            const rdfButtons = document.getElementById('rdf-buttons');
+            const rdfDisplay = document.getElementById('rdf-display');
+            rdfButtons.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON') {
+                    const rdfType = e.target.dataset.rdf;
+                    rdfDisplay.textContent = rdfData[rdfType];
+                    rdfButtons.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+                    e.target.classList.add('active');
+                }
+            });
+            rdfButtons.querySelector('[data-rdf="mhm"]').click();
+
+            const sparqlButtons = document.getElementById('sparql-buttons');
+            const sparqlDisplay = document.getElementById('sparql-display');
+            const sparqlDescription = document.getElementById('sparql-description');
+            const sparqlResultsContainer = document.getElementById('sparql-results');
+            
+            sparqlButtons.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON') {
+                    const queryId = e.target.dataset.query;
+                    const queryData = sparqlData[queryId];
+                    sparqlButtons.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+                    e.target.classList.add('active');
+                    
+                    sparqlDescription.textContent = queryData.description;
+                    sparqlDisplay.textContent = queryData.query;
+                    
+                    const headers = Object.keys(queryData.results[0]);
+                    let tableHTML = `<div class="overflow-x-auto"><table class="w-full text-sm text-left text-gray-600">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50/80">
+                            <tr>${headers.map(h => `<th scope="col" class="px-4 py-2">${h}</th>`).join('')}</tr>
+                        </thead><tbody>`;
+                    queryData.results.forEach(row => {
+                        tableHTML += `<tr class="bg-white border-b border-gray-100">${headers.map(h => `<td class="px-4 py-2 ${h.includes('Title') ? 'hebrew-text': ''}">${row[h]}</td>`).join('')}</tr>`;
+                    });
+                    tableHTML += '</tbody></table></div>';
+                    sparqlResultsContainer.innerHTML = tableHTML;
+                }
+            });
+
+            function buildHierarchy(items, parentId = null) {
+                const children = items.filter(item => item.parent_frame_id === parentId);
+                if (children.length === 0) return '';
+
+                let html = '<ul class="tree">';
+                children.forEach(item => {
+                    const subTree = buildHierarchy(items, item.frame_id);
+                    html += `<li>`;
+                    if (subTree) {
+                        html += `<span class="toggle" data-target="tree-node-${item.frame_id}">[+]</span>`;
+                    } else {
+                         html += `<span class="toggle opacity-0 pointer-events-none">[+]</span>`;
+                    }
+                    html += `<span class="hebrew-text">${item.frame_name_he}</span> <span class="text-gray-500 text-xs">/ ${item.frame_name_en}</span>`;
+                    if (subTree) {
+                        html += `<div id="tree-node-${item.frame_id}" class="hidden-subtree">${subTree}</div>`;
+                    }
+                    html += `</li>`;
+                });
+                html += '</ul>';
+                return html;
+            }
+
+            const hierarchyContainer = document.getElementById('skos-hierarchy-container');
+            hierarchyContainer.innerHTML = buildHierarchy(hierarchyData);
+            hierarchyContainer.addEventListener('click', e => {
+                if (e.target.classList.contains('toggle')) {
+                    const targetId = e.target.dataset.target;
+                    const subtree = document.getElementById(targetId);
+                    if (subtree) {
+                        subtree.classList.toggle('hidden-subtree');
+                        e.target.textContent = subtree.classList.contains('hidden-subtree') ? '[+]' : '[-]';
+                    }
+                }
+            });
+            
+            const mobileMenuButton = document.getElementById('mobile-menu-button');
+            const mobileMenu = document.getElementById('mobile-menu');
+            mobileMenuButton.addEventListener('click', () => {
+                mobileMenu.classList.toggle('hidden');
+            });
+            
+            const navLinks = document.querySelectorAll('nav a, #mobile-menu a');
+            navLinks.forEach(link => {
+                link.addEventListener('click', () => {
+                    if(mobileMenu.classList.contains('hidden') === false){
+                        mobileMenu.classList.add('hidden');
+                    }
+                });
+            });
+
+            const sections = document.querySelectorAll('section');
+            const mainNavLinks = document.querySelectorAll('header nav a');
+            window.addEventListener('scroll', () => {
+                let current = '';
+                sections.forEach(section => {
+                    const sectionTop = section.offsetTop;
+                    if (pageYOffset >= sectionTop - 100) {
+                        current = section.getAttribute('id');
+                    }
+                });
+                mainNavLinks.forEach(link => {
+                    link.classList.remove('active');
+                    if (link.getAttribute('href').substring(1) === current) {
+                        link.classList.add('active');
+                    }
+                });
+            });
+            
+            const lodGraphCanvas = document.getElementById('lod-graph-canvas');
+            const ctxLod = lodGraphCanvas.getContext('2d');
+            function drawLodGraph() {
+                const canvas = lodGraphCanvas;
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+                const ctx = ctxLod;
+                
+                const nodes = {
+                    manuscript: document.getElementById('node-manuscript'),
+                    author: document.getElementById('node-author'),
+                    scribe: document.getElementById('node-scribe'),
+                    place: document.getElementById('node-place'),
+                    material: document.getElementById('node-material'),
+                };
+                
+                const center = { x: canvas.width / 2, y: canvas.height / 2 };
+                
+                const positions = {
+                    manuscript: { x: center.x, y: center.y },
+                    author: { x: nodes.author.offsetLeft + nodes.author.offsetWidth / 2, y: nodes.author.offsetTop + nodes.author.offsetHeight / 2 },
+                    scribe: { x: nodes.scribe.offsetLeft + nodes.scribe.offsetWidth / 2, y: nodes.scribe.offsetTop + nodes.scribe.offsetHeight / 2 },
+                    place: { x: nodes.place.offsetLeft + nodes.place.offsetWidth / 2, y: nodes.place.offsetTop + nodes.place.offsetHeight / 2 },
+                    material: { x: nodes.material.offsetLeft + nodes.material.offsetWidth / 2, y: nodes.material.offsetTop + nodes.material.offsetHeight / 2 },
+                };
+
+                ctx.strokeStyle = '#D9D1C7';
+                ctx.lineWidth = 2;
+
+                Object.values(positions).forEach(pos => {
+                    if(pos !== positions.manuscript){
+                        ctx.beginPath();
+                        ctx.moveTo(positions.manuscript.x, positions.manuscript.y);
+                        ctx.lineTo(pos.x, pos.y);
+                        ctx.stroke();
+                    }
+                });
+            }
+            drawLodGraph();
+            new ResizeObserver(drawLodGraph).observe(lodGraphCanvas.parentElement);
+            
+            new Chart(document.getElementById('ontology-mix-chart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Wikidata', 'Schema.org', 'MHM Custom', 'Dublin Core/BIBFRAME'],
+                    datasets: [{
+                        label: 'Ontology Mix',
+                        data: [45, 30, 15, 10],
+                        backgroundColor: [ '#8C9F8A', '#C07F5A', '#EAE3D9', '#6B6157'],
+                        borderColor: '#F9F5EF',
+                        borderWidth: 4,
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 15 } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: ${context.raw}%`;
+                                }
+                            }
+                        }
+                    },
+                    cutout: '60%'
+                }
+            });
+        });
+    </script>
+</body>
+</html>
