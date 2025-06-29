@@ -135,6 +135,19 @@
           visibility: visible;
           opacity: 1;
         }
+        .chart-container {
+            position: relative;
+            height: 256px; /* h-64 */
+            width: 100%;
+            max-width: 20rem; /* max-w-xs */
+            margin-left: auto;
+            margin-right: auto;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 224px; /* md:h-56 */
+            }
+        }
     </style>
 </head>
 <body class="antialiased">
@@ -237,7 +250,7 @@
                         <h3 class="text-xl font-bold mb-4">Core Classes</h3>
                         <div id="class-buttons" class="flex flex-wrap md:flex-col gap-2"></div>
                          <h3 class="text-xl font-bold mb-4 mt-8">Ontology Mix</h3>
-                        <div class="chart-container relative h-64 md:h-56 w-full max-w-xs mx-auto">
+                        <div class="chart-container">
                             <canvas id="ontology-mix-chart"></canvas>
                         </div>
                     </div>
@@ -346,7 +359,7 @@
                     { 
                         id: 'Manuscript', 
                         label: 'Manuscript', 
-                        description: 'Represents the unique, tangible manuscript as a physical artifact. This class is the locus of codicological data (material, extent) and provenance history. It is a specific realization of an abstract work.',
+                        description: 'Represents the unique, tangible manuscript as a physical artifact. This class is the locus of codicological data (material, extent, script type) and provenance history. It is a specific realization of an abstract work.',
                         equivalents: ['schema:Manuscript', 'wd:Q87167']
                     },
                     { 
@@ -376,7 +389,7 @@
                     {
                         id: 'ProvenanceEvent',
                         label: 'Provenance Event',
-                        description: 'A custom class to model a discrete event in the manuscript\'s history, such as a sale, donation, or act of censorship. This provides a "CRM-lite" mechanism for structuring data extracted from unstructured notes.',
+                        description: 'A custom class to model a discrete event in the manuscript\'s history, such as a sale, donation, bequest, or act of censorship. This provides a "CRM-lite" mechanism for structuring data extracted from unstructured notes.',
                         equivalents: ['N/A']
                     }
                 ],
@@ -386,8 +399,10 @@
                     { id: 'wdt:P195', label: 'collection', domain: 'Manuscript', range: 'Organization', type: 'relational', description: 'The institution or collection that currently holds the manuscript.' },
                     { id: 'wdt:P921', label: 'main subject', domain: 'Work', range: 'skos:Concept', type: 'relational', description: 'The primary topic of the work, linking to the Friedberg KOS.' },
                     { id: 'wdt:P186', label: 'material used', domain: 'Manuscript', range: 'wd:Item', type: 'relational', description: 'The physical material on which the manuscript is written (e.g., parchment).' },
+                    { id: 'mhm:hasScript', label: 'has script', domain: 'Manuscript', range: 'wd:Item', type: 'relational', description: 'Identifies the script type (e.g., "Sefardi semi-cursive"). (LLM-extracted)'},
                     { id: 'mhm:hasScribe', label: 'has scribe', domain: 'Manuscript', range: 'Person', type: 'relational', description: 'Identifies the person who physically wrote the manuscript. (LLM-extracted)' },
                     { id: 'mhm:hasOwner', label: 'has owner', domain: 'Manuscript', range: 'Person or Organization', type: 'relational', description: 'Identifies a past or present owner of the manuscript. (LLM-extracted)' },
+                    { id: 'mhm:hasPatron', label: 'has patron', domain: 'Manuscript', range: 'Person or Organization', type: 'relational', description: 'Identifies the person or institution that commissioned the manuscript. (LLM-extracted)' },
                     { id: 'mhm:hasProvenanceEvent', label: 'has provenance event', domain: 'Manuscript', range: 'ProvenanceEvent', type: 'relational', description: 'Links a manuscript to a specific event in its history.'},
                     { id: 'dct:spatial', label: 'spatial coverage', domain: 'Manuscript or ProvenanceEvent', range: 'Place', type: 'relational', description: 'The geographic location associated with an entity.' },
                     { id: 'mhm:involvedAgent', label: 'involved agent', domain: 'ProvenanceEvent', range: 'Person or Organization', type: 'relational', description: 'An agent participating in a provenance event.'},
@@ -397,7 +412,8 @@
                     { id: 'dct:identifier', label: 'identifier', domain: 'Manuscript', range: 'rdfs:Literal', type: 'datatype', description: 'A unique identifier for the manuscript, such as the NLI system number.' },
                     { id: 'wdt:P953', label: 'full work available at', domain: 'Manuscript', range: 'xsd:anyURI', type: 'datatype', description: 'A URL pointing to a digital surrogate.' },
                     { id: 'rdfs:label', label: 'label', domain: 'Person, Organization, Place', range: 'rdf:langString', type: 'datatype', description: 'The human-readable name of an entity.'},
-                    { id: 'dct:date', label: 'date', domain: 'ProvenanceEvent', range: 'xsd:string or xsd:date', type: 'datatype', description: 'The date associated with a provenance event.'}
+                    { id: 'dct:date', label: 'date', domain: 'ProvenanceEvent', range: 'xsd:string or xsd:date', type: 'datatype', description: 'The date associated with a provenance event.'},
+                    { id: 'mhm:eventType', label: 'event type', domain: 'ProvenanceEvent', range: 'rdfs:Literal', type: 'datatype', description: 'A literal describing the nature of the provenance event (e.g., "רכישה", "ירושה").'}
                 ]
             };
             
